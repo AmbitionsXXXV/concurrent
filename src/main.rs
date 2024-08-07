@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use rand::random;
 use std::{sync::mpsc, thread};
 
 const NUM_PRODUCTS: usize = 4;
@@ -36,7 +37,8 @@ fn producer(idx: usize, tx: mpsc::Sender<Msg>) -> Result<()> {
   loop {
     let value = rand::random::<usize>();
     tx.send(Msg::new(idx, value))?;
-    thread::sleep(std::time::Duration::from_secs(3));
+    let sleep_time = random::<u8>() as u64 * 10;
+    thread::sleep(std::time::Duration::from_millis(sleep_time as _));
   }
 }
 
