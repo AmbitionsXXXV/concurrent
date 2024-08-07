@@ -20,12 +20,17 @@ fn main() -> Result<()> {
     thread::spawn(move || producer(i, tx));
   }
 
+  drop(tx);
+
   let consumer = thread::spawn(move || {
     for msg in rx {
       println!("Consumer: {:?}", msg);
     }
+
+    println!("Consumer exit");
   });
 
+  // 主线程等待消费者线程结束
   consumer
     .join()
     .map_err(|e| anyhow!("Consumer thread panicked: {:?}", e))?;
@@ -39,6 +44,12 @@ fn producer(idx: usize, tx: mpsc::Sender<Msg>) -> Result<()> {
     tx.send(Msg::new(idx, value))?;
     let sleep_time = random::<u8>() as u64 * 10;
     thread::sleep(std::time::Duration::from_millis(sleep_time as _));
+
+    // 随机停止生产
+    if random::<u8>() % 10 == 0 {
+      println!("Producer {} stopped", idx);
+      break Ok(());
+    }
   }
 }
 
