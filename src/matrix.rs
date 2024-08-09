@@ -44,6 +44,7 @@ pub struct Msg<T> {
 }
 
 /// 矩阵乘法函数
+/// 矩阵乘法函数
 pub fn multiply<T>(a: &Matrix<T>, b: &Matrix<T>) -> Result<Matrix<T>>
 where
   T: Copy
@@ -54,27 +55,27 @@ where
     + Send
     + 'static,
 {
-  // --检查矩阵维度是否匹配--
+  // 步骤 1 : 检查矩阵维度是否匹配
   if a.col != b.row {
-    return Err(anyhow!("Matrix multiply error: a.col != b.row"));
+    return Err(anyhow!("矩阵乘法错误 : a.col != b.row"));
   }
 
-  // --创建发送器数组，每个线程一个--
+  // 步骤 2 : 创建发送器数组 ， 每个线程一个
   let senders = (0..NUM_THREADS)
     .map(|_| {
       let (tx, rx) = mpsc::channel::<Msg<T>>();
 
-      // --为每个发送器创建一个工作线程--
+      // 步骤 3 : 为每个发送器创建一个工作线程
       thread::spawn(move || {
         for msg in rx {
-          // --计算点积--
+          // 步骤 4 : 计算点积
           let value = dot_product(msg.input.row, msg.input.col)?;
-          // --发送计算结果--
+          // 步骤 5 : 发送计算结果
           if let Err(e) = msg.sender.send(MsgOutput {
             idx: msg.input.idx,
             value,
           }) {
-            eprintln!("send error: {}", e);
+            eprintln!("发送错误 : {}", e);
           }
         }
 
@@ -85,15 +86,15 @@ where
     })
     .collect::<Vec<_>>();
 
-  // --准备结果矩阵--
+  // 步骤 6 : 准备结果矩阵
   let matrix_len = a.row * b.col;
   let mut data = vec![T::default(); matrix_len];
   let mut receivers = Vec::with_capacity(matrix_len);
 
-  // --分发计算任务--
+  // 步骤 7 : 分发计算任务
   for i in 0..a.row {
     for j in 0..b.col {
-      // --准备输入数据--
+      // --步骤 8 : 准备输入数据--
       // 这行代码从矩阵 a 中提取第 i 行的数据，并创建一个新的 Vector 对象
       // a.data[i * a.col..(i + 1) * a.col] 表示从矩阵 a 的数据中截取第 i 行的所有元素
       // i * a.col 是行的起始索引，(i + 1) * a.col 是下一行的起始索引
@@ -108,26 +109,26 @@ where
       let idx = i * b.col + j;
       let input = MsgInput::new(idx, row, col);
 
-      // --创建一次性通道--
+      // 步骤 9 : 创建一次性通道
       let (tx, rx) = oneshot::channel();
       let msg = Msg::new(input, tx);
 
-      // --发送任务到工作线程--
+      // 步骤 10 : 发送任务到工作线程
       if let Err(e) = senders[idx % NUM_THREADS].send(msg) {
-        eprintln!("send error: {}", e);
+        eprintln!("发送错误 : {}", e);
       }
 
       receivers.push(rx);
     }
   }
 
-  // --收集计算结果--
+  // 步骤 11 : 收集计算结果
   for rx in receivers {
     let ret = rx.recv()?;
     data[ret.idx] = ret.value;
   }
 
-  // --返回结果矩阵--
+  // 步骤 12 : 返回结果矩阵
   Ok(Matrix {
     data,
     row: a.row,
@@ -197,6 +198,23 @@ impl<T> Msg<T> {
   }
 }
 
+impl<T> Mul for Matrix<T>
+where
+  T: Copy
+    + Default
+    + Mul<Output = T>
+    + Add<Output = T>
+    + AddAssign<T>
+    + Send
+    + 'static,
+{
+  type Output = Self;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    multiply(&self, &rhs).expect("矩阵乘法错误")
+  }
+}
+
 /// 测试模块
 #[cfg(test)]
 mod tests {
@@ -204,19 +222,40 @@ mod tests {
 
   #[test]
   fn test_matrix_multiply() -> Result<()> {
-    // --创建测试矩阵--
     let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
     let b = Matrix::new([1, 2, 3, 4, 5, 6], 3, 2);
-
-    // --执行矩阵乘法--
-    let c = multiply(&a, &b)?;
-
-    // --验证结果--
+    let c = a * b;
     assert_eq!(c.col, 2);
     assert_eq!(c.row, 2);
     assert_eq!(c.data, vec![22, 28, 49, 64]);
     assert_eq!(format!("{:?}", c), "Matrix(row=2, col=2, {22 28, 49 64})");
 
     Ok(())
+  }
+
+  #[test]
+  fn test_matrix_display() -> Result<()> {
+    let a = Matrix::new([1, 2, 3, 4], 2, 2);
+    let b = Matrix::new([1, 2, 3, 4], 2, 2);
+    let c = a * b;
+    assert_eq!(c.data, vec![7, 10, 15, 22]);
+    assert_eq!(format!("{}", c), "{7 10, 15 22}");
+    Ok(())
+  }
+
+  #[test]
+  fn test_a_can_not_multiply_b() {
+    let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+    let b = Matrix::new([1, 2, 3, 4], 2, 2);
+    let c = multiply(&a, &b);
+    assert!(c.is_err());
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_a_can_not_multiply_b_panic() {
+    let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+    let b = Matrix::new([1, 2, 3, 4], 2, 2);
+    let _c = a * b;
   }
 }
