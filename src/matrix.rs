@@ -94,6 +94,10 @@ where
   for i in 0..a.row {
     for j in 0..b.col {
       // --准备输入数据--
+      // 这行代码从矩阵 a 中提取第 i 行的数据，并创建一个新的 Vector 对象
+      // a.data[i * a.col..(i + 1) * a.col] 表示从矩阵 a 的数据中截取第 i 行的所有元素
+      // i * a.col 是行的起始索引，(i + 1) * a.col 是下一行的起始索引
+      // Vector::new() 将这些数据封装成一个 Vector 对象，用于后续的点积计算
       let row = Vector::new(&a.data[i * a.col..(i + 1) * a.col]);
       let col_data: Vec<T> = b.data[j..]
         .iter()
